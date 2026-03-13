@@ -109,15 +109,17 @@ services:
       - scheduling-network
 
   # 8. Notification Service (Listens to RabbitMQ to send emails)
-  # notification-service:
-  #   build: 
-  #     context: ./apps/notification-service
-  #     dockerfile: Dockerfile
-  #   container_name: scheduling-notification
-  #   depends_on:
-  #     - rabbitmq
-  #   networks:
-  #     - scheduling-network
+  notification-service:
+    build: 
+      context: ./apps/notification-service
+      dockerfile: Dockerfile
+    container_name: scheduling-notification
+    depends_on:
+      - rabbitmq
+    environment:
+      RABBITMQ_URL: "amqp://admin:password123@rabbitmq:5672"
+    networks:
+      - scheduling-network
 
   # # 9. Frontend (Client - React/Vite)
   client:

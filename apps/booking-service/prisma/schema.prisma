@@ -11,12 +11,13 @@ model Booking {
   id            String   @id @default(uuid())
   bookerName    String
   bookerEmail   String
+  notes         String?  // Made optional in case they leave it blank
   startTime     DateTime
   endTime       DateTime
-  status        String   @default("CONFIRMED") // CONFIRMED, CANCELLED
+  status        String   @default("CONFIRMED") 
   
-  eventTypeId   String   // Loose relation to Event Service
-  userId        String   // Loose relation to Auth Service (the admin who owns the event)
+  eventTypeId   String   
+  userId        String   
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

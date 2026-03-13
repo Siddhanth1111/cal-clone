@@ -33,6 +33,12 @@ app.use('/api/bookings', createProxyMiddleware({
   changeOrigin: true 
 }));
 
+// Add this right next to your existing routes!
+app.use('/api/availability', createProxyMiddleware({ 
+  target: 'http://event-service:3002', 
+  changeOrigin: true 
+}));
+
 app.listen(PORT, () => {
   console.log(`API Gateway listening on port ${PORT}`);
 });

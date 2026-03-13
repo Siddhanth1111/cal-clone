@@ -11,24 +11,25 @@ model EventType {
   id          String   @id @default(uuid())
   title       String
   description String?
-  duration    Int      // Duration in minutes
+  duration    Int      
   urlSlug     String   @unique
   isActive    Boolean  @default(true)
-  
-  userId      String   // Loose relation to Auth Service User ID
+  userId      String   
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
 
+// UPGRADED MODEL
 model Availability {
-  id         String   @id @default(uuid())
-  daysOfWeek Int[]    // e.g., [1, 2, 3, 4, 5] for Mon-Fri
-  startTime  String   // e.g., "09:00"
-  endTime    String   // e.g., "17:00"
+  id          String   @id @default(uuid())
+  name        String   @default("Working hours")
+  days        Json     // Will store the toggles and times for Sun-Sat
+  timeZone    String   @default("Asia/Kolkata")
+  isDefault   Boolean  @default(true)
   
-  userId     String   // Loose relation to Auth Service User ID
+  userId      String   
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
