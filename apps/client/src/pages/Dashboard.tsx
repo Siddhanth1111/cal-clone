@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Calendar, Clock, Link as LinkIcon, Settings, Plus, X, Edit2, Trash2, Search } from 'lucide-react';
 import axios from 'axios';
 
-const API_URL = 'http://13.62.127.1:8080/api';
+const API_URL = 'http://13.61.190.254:8080/api';
 
 export default function Dashboard() {
   const navigate = useNavigate();

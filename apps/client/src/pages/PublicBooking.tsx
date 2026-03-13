@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Clock, CheckCircle2, Calendar as CalendarIcon, ArrowLeft, User, AlignLeft, Globe } from 'lucide-react';
 import axios from 'axios';
 
-const API_URL = 'http://13.62.127.1:8080/api';
+const API_URL = 'http://13.61.190.254:8080/api';
 
 export default function PublicBooking() {
   const { username, eventSlug } = useParams();
