@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, Clock, Link as LinkIcon, Settings, Plus, X, Edit2, Trash2 } from 'lucide-react';
+import { Calendar, Clock, Link as LinkIcon, Settings, Plus, X, Edit2, Trash2, Search } from 'lucide-react';
 import axios from 'axios';
 
 const API_URL = 'http://localhost:8080/api';
@@ -8,53 +8,51 @@ const API_URL = 'http://localhost:8080/api';
 export default function Dashboard() {
   const navigate = useNavigate();
   const [eventTypes, setEventTypes] = useState([]);
+  const [schedules, setSchedules] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  
-  // State to track if we are editing an existing event or creating a new one
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [newEvent, setNewEvent] = useState({ title: '', description: '', duration: 30, urlSlug: '' });
+  const [newEvent, setNewEvent] = useState({ title: '', description: '', duration: 30, urlSlug: '', availabilityId: '' });
 
   useEffect(() => {
     fetchEvents();
+    fetchSchedules();
   }, []);
 
   const fetchEvents = async () => {
-    try {
-      const res = await axios.get(`${API_URL}/events`);
-      setEventTypes(res.data);
-    } catch (error) {
-      console.error("Failed to fetch events");
-    }
+    const res = await axios.get(`${API_URL}/events`);
+    setEventTypes(res.data);
+  };
+
+  const fetchSchedules = async () => {
+    const res = await axios.get(`${API_URL}/availability/0d28a3c2-0715-4116-ab27-12398df3c2aa`);
+    setSchedules(res.data);
   };
 
   const openCreateModal = () => {
     setEditingId(null);
-    setNewEvent({ title: '', description: '', duration: 30, urlSlug: '' });
+    const defaultSchedule = schedules.find(s => s.isDefault)?.id || (schedules.length > 0 ? schedules[0].id : '');
+    setNewEvent({ title: '', description: '', duration: 30, urlSlug: '', availabilityId: defaultSchedule });
     setIsModalOpen(true);
   };
 
   const openEditModal = (e: React.MouseEvent, event: any) => {
-    e.stopPropagation(); // Prevents the card click (routing) from triggering
+    e.stopPropagation();
     setEditingId(event.id);
     setNewEvent({
       title: event.title,
       description: event.description || '',
       duration: event.duration,
-      urlSlug: event.urlSlug
+      urlSlug: event.urlSlug,
+      availabilityId: event.availabilityId || (schedules.find(s => s.isDefault)?.id || '')
     });
     setIsModalOpen(true);
   };
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation(); // Prevents the card click
-    
+    e.stopPropagation();
     if (window.confirm("Are you sure you want to delete this event type? This will not delete past bookings.")) {
-      try {
-        await axios.delete(`${API_URL}/events/${id}`);
-        fetchEvents(); // Refresh the list
-      } catch (error) {
-        alert("Failed to delete event.");
-      }
+      await axios.delete(`${API_URL}/events/${id}`);
+      fetchEvents();
     }
   };
 
@@ -62,14 +60,9 @@ export default function Dashboard() {
     e.preventDefault();
     try {
       if (editingId) {
-        // Update existing event
         await axios.put(`${API_URL}/events/${editingId}`, newEvent);
       } else {
-        // Create new event
-        await axios.post(`${API_URL}/events`, {
-          ...newEvent,
-          userId: "default-admin-id" 
-        });
+        await axios.post(`${API_URL}/events`, { ...newEvent, userId: "0d28a3c2-0715-4116-ab27-12398df3c2aa" });
       }
       setIsModalOpen(false);
       fetchEvents();
@@ -79,120 +72,321 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen flex bg-[#f9fafb]">
+    <div className="min-h-screen flex" style={{ backgroundColor: '#101010', color: '#f3f4f6', fontFamily: "'Cal Sans', system-ui, -apple-system, sans-serif" }}>
       {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-gray-200 p-6 hidden md:block">
-        <div className="flex items-center gap-2 mb-10 cursor-pointer" onClick={() => navigate('/dashboard')}>
-          <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center">
-            <Calendar className="text-white w-5 h-5" />
+      <aside
+        className="hidden md:flex flex-col w-56 flex-shrink-0 border-r"
+        style={{ backgroundColor: '#1a1a1a', borderColor: '#2a2a2a', padding: '20px 0' }}
+      >
+        {/* Logo */}
+        <div
+          className="flex items-center gap-2 cursor-pointer px-4 mb-8"
+          onClick={() => navigate('/dashboard')}
+        >
+          <div className="w-7 h-7 rounded-md flex items-center justify-center" style={{ backgroundColor: '#6d28d9' }}>
+            <Calendar className="w-4 h-4 text-white" />
           </div>
-          <span className="font-bold text-xl tracking-tight text-black">Cal.clone</span>
+          <span className="font-bold text-base tracking-tight" style={{ color: '#f3f4f6' }}>Cal.clone</span>
         </div>
-        <nav className="space-y-1">
-          <NavItem icon={<LinkIcon size={18} />} label="Event Types" active onClick={() => navigate('/dashboard')} />
-          <NavItem icon={<Calendar size={18} />} label="Bookings" onClick={() => navigate('/bookings')} />
-          <NavItem icon={<Clock size={18} />} label="Availability" onClick={() => navigate('/availability')} />
-          <NavItem icon={<Settings size={18} />} label="Settings" />
+
+        <nav className="flex-1 px-2 space-y-0.5">
+          <NavItem icon={<LinkIcon size={15} />} label="Event Types" active onClick={() => navigate('/dashboard')} />
+          <NavItem icon={<Calendar size={15} />} label="Bookings" onClick={() => navigate('/bookings')} />
+          <NavItem icon={<Clock size={15} />} label="Availability" onClick={() => navigate('/availability')} />
+          <NavItem icon={<Settings size={15} />} label="Settings" />
         </nav>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 p-10 max-w-5xl">
-        <header className="flex justify-between items-center mb-8">
+      {/* Main content */}
+      <main className="flex-1 flex flex-col min-w-0">
+        {/* Top bar */}
+        <div
+          className="flex items-center justify-between px-6 py-4 border-b flex-wrap gap-3"
+          style={{ borderColor: '#2a2a2a', backgroundColor: '#1a1a1a' }}
+        >
           <div>
-            <h1 className="text-2xl font-bold text-black">Event Types</h1>
-            <p className="text-gray-500 text-sm mt-1">Create events to share for booking.</p>
+            <h1 className="text-lg font-semibold" style={{ color: '#f3f4f6' }}>Event Types</h1>
+            <p className="text-xs mt-0.5" style={{ color: '#6b7280' }}>Configure different events for people to book on your calendar.</p>
           </div>
-          <button 
-            onClick={openCreateModal}
-            className="flex items-center gap-2 bg-black text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-800 transition"
-          >
-            <Plus size={16} /> New
-          </button>
-        </header>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {eventTypes.map((event: any) => (
-            <div 
-              key={event.id} 
-              onClick={() => navigate(`/book/siddhanth/${event.urlSlug}`)} 
-              className="bg-white border border-gray-200 rounded-xl p-5 hover:border-black transition cursor-pointer shadow-sm relative group"
-            >
-              <h3 className="font-semibold text-black pr-12">{event.title}</h3>
-              {event.description && <p className="text-gray-500 text-sm mt-1 truncate">{event.description}</p>}
-              <p className="text-gray-500 text-sm flex items-center gap-1 mt-3 font-medium">
-                <Clock size={14} /> {event.duration} mins
-              </p>
-
-              {/* Hover Actions (Edit & Delete) */}
-              <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button 
-                  onClick={(e) => openEditModal(e, event)}
-                  className="p-1.5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-md transition"
-                >
-                  <Edit2 size={16} />
-                </button>
-                <button 
-                  onClick={(e) => handleDelete(e, event.id)}
-                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
+          <div className="flex items-center gap-3">
+            {/* Search bar */}
+            <div className="relative hidden sm:block">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: '#6b7280' }} />
+              <input
+                type="text"
+                placeholder="Search..."
+                className="pl-8 pr-3 py-1.5 text-xs rounded-md border outline-none"
+                style={{
+                  backgroundColor: '#111111',
+                  borderColor: '#2a2a2a',
+                  color: '#f3f4f6',
+                  width: '180px',
+                }}
+              />
             </div>
-          ))}
-          {eventTypes.length === 0 && (
-             <div className="col-span-full py-20 text-center border-2 border-dashed border-gray-200 rounded-xl">
-               <p className="text-gray-500">No event types created yet.</p>
-             </div>
-          )}
+            <button
+              onClick={openCreateModal}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all"
+              style={{ backgroundColor: '#6d28d9', color: '#fff' }}
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#5b21b6')}
+              onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#6d28d9')}
+            >
+              <Plus size={13} /> New
+            </button>
+          </div>
         </div>
 
-        {/* Create / Edit Modal */}
-        {isModalOpen && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold text-black">{editingId ? 'Edit Event Type' : 'New Event Type'}</h2>
-                <X className="cursor-pointer text-gray-400 hover:text-black" onClick={() => setIsModalOpen(false)} />
-              </div>
-              <form onSubmit={handleSave} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Title</label>
-                  <input type="text" required className="w-full border border-gray-300 rounded-md p-2 mt-1 text-black focus:ring-black focus:border-black" 
-                    value={newEvent.title} onChange={e => setNewEvent({...newEvent, title: e.target.value})} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">URL Slug</label>
-                  <input type="text" required className="w-full border border-gray-300 rounded-md p-2 mt-1 text-black focus:ring-black focus:border-black" 
-                    value={newEvent.urlSlug} onChange={e => setNewEvent({...newEvent, urlSlug: e.target.value})} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Description</label>
-                  <textarea className="w-full border border-gray-300 rounded-md p-2 mt-1 text-black focus:ring-black focus:border-black" rows={2}
-                    value={newEvent.description} onChange={e => setNewEvent({...newEvent, description: e.target.value})}></textarea>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Duration (minutes)</label>
-                  <input type="number" required min="15" step="15" className="w-full border border-gray-300 rounded-md p-2 mt-1 text-black focus:ring-black focus:border-black" 
-                    value={newEvent.duration} onChange={e => setNewEvent({...newEvent, duration: parseInt(e.target.value)})} />
-                </div>
-                <button type="submit" className="w-full bg-black text-white py-2 rounded-md font-medium hover:bg-gray-800 transition">
-                  {editingId ? 'Save Changes' : 'Create Event'}
-                </button>
-              </form>
+        {/* Event list */}
+        <div className="flex-1 px-4 sm:px-6 py-6">
+          {eventTypes.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-48" style={{ color: '#6b7280' }}>
+              <LinkIcon size={32} className="mb-3 opacity-30" />
+              <p className="text-sm">No event types yet. Create your first one!</p>
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="space-y-2">
+              {eventTypes.map((event: any) => {
+                const scheduleName = schedules.find(s => s.id === event.availabilityId)?.name || 'Default Schedule';
+                return (
+                  <EventRow
+                    key={event.id}
+                    event={event}
+                    scheduleName={scheduleName}
+                    onEdit={(e) => openEditModal(e, event)}
+                    onDelete={(e) => handleDelete(e, event.id)}
+                    onClick={() => navigate(`/book/0d28a3c2-0715-4116-ab27-12398df3c2aa/${event.urlSlug}`)}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </div>
       </main>
+
+      {/* Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.7)' }}>
+          <div
+            className="w-full max-w-md rounded-xl shadow-2xl border"
+            style={{ backgroundColor: '#1a1a1a', borderColor: '#2a2a2a' }}
+          >
+            <div className="flex justify-between items-center px-6 py-4 border-b" style={{ borderColor: '#2a2a2a' }}>
+              <h2 className="text-base font-semibold" style={{ color: '#f3f4f6' }}>
+                {editingId ? 'Edit Event Type' : 'New Event Type'}
+              </h2>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="p-1 rounded-md transition"
+                style={{ color: '#6b7280' }}
+                onMouseEnter={e => (e.currentTarget.style.color = '#f3f4f6')}
+                onMouseLeave={e => (e.currentTarget.style.color = '#6b7280')}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSave} className="px-6 py-5 space-y-4">
+              <FormField label="Title">
+                <input
+                  type="text"
+                  required
+                  className="w-full rounded-md px-3 py-2 text-sm border outline-none transition"
+                  style={{ backgroundColor: '#111111', borderColor: '#2a2a2a', color: '#f3f4f6' }}
+                  value={newEvent.title}
+                  onChange={e => setNewEvent({ ...newEvent, title: e.target.value })}
+                  onFocus={e => (e.currentTarget.style.borderColor = '#6d28d9')}
+                  onBlur={e => (e.currentTarget.style.borderColor = '#2a2a2a')}
+                />
+              </FormField>
+
+              <FormField label="URL Slug">
+                <input
+                  type="text"
+                  required
+                  className="w-full rounded-md px-3 py-2 text-sm border outline-none transition"
+                  style={{ backgroundColor: '#111111', borderColor: '#2a2a2a', color: '#f3f4f6' }}
+                  value={newEvent.urlSlug}
+                  onChange={e => setNewEvent({ ...newEvent, urlSlug: e.target.value })}
+                  onFocus={e => (e.currentTarget.style.borderColor = '#6d28d9')}
+                  onBlur={e => (e.currentTarget.style.borderColor = '#2a2a2a')}
+                />
+              </FormField>
+
+              <FormField label="Description">
+                <textarea
+                  rows={2}
+                  className="w-full rounded-md px-3 py-2 text-sm border outline-none transition resize-none"
+                  style={{ backgroundColor: '#111111', borderColor: '#2a2a2a', color: '#f3f4f6' }}
+                  value={newEvent.description}
+                  onChange={e => setNewEvent({ ...newEvent, description: e.target.value })}
+                  onFocus={e => (e.currentTarget.style.borderColor = '#6d28d9')}
+                  onBlur={e => (e.currentTarget.style.borderColor = '#2a2a2a')}
+                />
+              </FormField>
+
+              <div className="grid grid-cols-2 gap-3">
+                <FormField label="Duration (min)">
+                  <input
+                    type="number"
+                    required
+                    min="15"
+                    step="15"
+                    className="w-full rounded-md px-3 py-2 text-sm border outline-none transition"
+                    style={{ backgroundColor: '#111111', borderColor: '#2a2a2a', color: '#f3f4f6' }}
+                    value={newEvent.duration}
+                    onChange={e => setNewEvent({ ...newEvent, duration: parseInt(e.target.value) })}
+                    onFocus={e => (e.currentTarget.style.borderColor = '#6d28d9')}
+                    onBlur={e => (e.currentTarget.style.borderColor = '#2a2a2a')}
+                  />
+                </FormField>
+
+                <FormField label="Schedule">
+                  <select
+                    required
+                    value={newEvent.availabilityId}
+                    onChange={e => setNewEvent({ ...newEvent, availabilityId: e.target.value })}
+                    className="w-full rounded-md px-3 py-2 text-sm border outline-none transition"
+                    style={{ backgroundColor: '#111111', borderColor: '#2a2a2a', color: '#f3f4f6' }}
+                    onFocus={e => (e.currentTarget.style.borderColor = '#6d28d9')}
+                    onBlur={e => (e.currentTarget.style.borderColor = '#2a2a2a')}
+                  >
+                    {schedules.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </FormField>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-2 rounded-md text-sm font-medium transition-all mt-2"
+                style={{ backgroundColor: '#6d28d9', color: '#fff' }}
+                onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#5b21b6')}
+                onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#6d28d9')}
+              >
+                {editingId ? 'Save Changes' : 'Create Event'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function NavItem({ icon, label, active = false, onClick }: { icon: any, label: string, active?: boolean, onClick?: () => void }) {
+function EventRow({ event, scheduleName, onEdit, onDelete, onClick }: {
+  event: any;
+  scheduleName: string;
+  onEdit: (e: React.MouseEvent) => void;
+  onDelete: (e: React.MouseEvent) => void;
+  onClick: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+
   return (
-    <div onClick={onClick} className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium cursor-pointer transition ${active ? 'bg-gray-100 text-black' : 'text-gray-500 hover:bg-gray-50 hover:text-black'}`}>
-      {icon} {label}
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="flex items-center justify-between rounded-lg px-4 py-3.5 border cursor-pointer transition-all"
+      style={{
+        backgroundColor: hovered ? '#222222' : '#1a1a1a',
+        borderColor: hovered ? '#3f3f46' : '#2a2a2a',
+      }}
+    >
+      {/* Left: color dot + info */}
+      <div className="flex items-center gap-3 min-w-0">
+        <div
+          className="w-2 h-2 rounded-full flex-shrink-0"
+          style={{ backgroundColor: '#6d28d9' }}
+        />
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium text-sm" style={{ color: '#f3f4f6' }}>{event.title}</span>
+            <span className="text-xs px-1.5 py-0.5 rounded" style={{ backgroundColor: '#111111', color: '#9ca3af', border: '1px solid #2a2a2a' }}>
+              /{event.urlSlug}
+            </span>
+          </div>
+          {event.description && (
+            <p className="text-xs mt-0.5 truncate max-w-xs" style={{ color: '#6b7280' }}>{event.description}</p>
+          )}
+          <div className="flex items-center gap-3 mt-1">
+            <span className="text-xs flex items-center gap-1" style={{ color: '#9ca3af' }}>
+              <Clock size={11} /> {event.duration}m
+            </span>
+            <span className="text-xs" style={{ color: '#6b7280' }}>{scheduleName}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Right: actions */}
+      <div
+        className="flex items-center gap-1 flex-shrink-0 transition-opacity"
+        style={{ opacity: hovered ? 1 : 0 }}
+        onClick={e => e.stopPropagation()}
+      >
+        <ActionButton onClick={onEdit} title="Edit">
+          <Edit2 size={14} />
+        </ActionButton>
+        <ActionButton onClick={onDelete} title="Delete" danger>
+          <Trash2 size={14} />
+        </ActionButton>
+      </div>
+    </div>
+  );
+}
+
+function ActionButton({ onClick, children, title, danger = false }: {
+  onClick: (e: React.MouseEvent) => void;
+  children: React.ReactNode;
+  title: string;
+  danger?: boolean;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="p-1.5 rounded-md transition-all"
+      style={{
+        color: hovered ? (danger ? '#f87171' : '#f3f4f6') : '#6b7280',
+        backgroundColor: hovered ? (danger ? 'rgba(248,113,113,0.1)' : '#2a2a2a') : 'transparent',
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function NavItem({ icon, label, active = false, onClick }: {
+  icon: any;
+  label: string;
+  active?: boolean;
+  onClick?: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="flex items-center gap-2.5 px-3 py-2 rounded-md text-xs font-medium cursor-pointer transition-all"
+      style={{
+        backgroundColor: active ? '#2a2a2a' : hovered ? '#222222' : 'transparent',
+        color: active ? '#f3f4f6' : hovered ? '#d1d5db' : '#6b7280',
+      }}
+    >
+      {icon}
+      {label}
+    </div>
+  );
+}
+
+function FormField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block text-xs font-medium mb-1" style={{ color: '#9ca3af' }}>{label}</label>
+      {children}
     </div>
   );
 }

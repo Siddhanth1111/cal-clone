@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Clock, CheckCircle2, Calendar as CalendarIcon, ArrowLeft, User, AlignLeft } from 'lucide-react';
+import { Clock, CheckCircle2, Calendar as CalendarIcon, ArrowLeft, User, AlignLeft, Globe } from 'lucide-react';
 import axios from 'axios';
 
 const API_URL = 'http://localhost:8080/api';
@@ -8,14 +8,14 @@ const API_URL = 'http://localhost:8080/api';
 export default function PublicBooking() {
   const { username, eventSlug } = useParams();
   const navigate = useNavigate();
-  
+
   const [eventType, setEventType] = useState<any>(null);
   const [availability, setAvailability] = useState<any>(null);
-  
+
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
-  const [busySlots, setBusySlots] = useState<{start: Date, end: Date}[]>([]); // NEW STATE
-  
+  const [busySlots, setBusySlots] = useState<{ start: Date, end: Date }[]>([]);
+
   const [step, setStep] = useState<'calendar' | 'form' | 'success'>('calendar');
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({ name: '', email: '', notes: '' });
@@ -28,8 +28,12 @@ export default function PublicBooking() {
         const foundEvent = eventsRes.data.find((e: any) => e.urlSlug === eventSlug);
         setEventType(foundEvent);
 
-        const availRes = await axios.get(`${API_URL}/availability/default-admin-id`);
-        setAvailability(availRes.data);
+        const availRes = await axios.get(`${API_URL}/availability/0d28a3c2-0715-4116-ab27-12398df3c2aa`);
+        const targetSchedule = availRes.data.find((a: any) => a.id === foundEvent?.availabilityId)
+          || availRes.data.find((a: any) => a.isDefault)
+          || availRes.data[0];
+
+        setAvailability(targetSchedule);
       } catch (error) {
         console.error("Error fetching", error);
       }
@@ -37,17 +41,13 @@ export default function PublicBooking() {
     fetchData();
   }, [eventSlug]);
 
-
-  // NEW: Fetch busy times filtering by USER, not Event Type
   useEffect(() => {
     if (selectedDate && eventType) {
       const startOfDay = new Date(selectedDate);
       startOfDay.setHours(0, 0, 0, 0);
-      
       const endOfDay = new Date(selectedDate);
       endOfDay.setHours(23, 59, 59, 999);
 
-      // CHANGE: We now pass userId=${eventType.userId} instead of eventTypeId
       axios.get(`${API_URL}/bookings/busy?userId=${eventType.userId}&start=${startOfDay.toISOString()}&end=${endOfDay.toISOString()}`)
         .then(res => {
           setBusySlots(res.data.map((b: any) => ({
@@ -80,23 +80,21 @@ export default function PublicBooking() {
     endTime.setHours(endHour, endMin, 0, 0);
 
     const durationInMs = eventType.duration * 60000;
-    const now = new Date(); 
+    const bufferInMs = 1 * 60000;
+    const now = new Date();
 
     while (currentSlot.getTime() + durationInMs <= endTime.getTime()) {
       const slotEnd = new Date(currentSlot.getTime() + durationInMs);
-      
-      // ALGORITHM: Does this slot overlap with ANY busy slot in the database?
-      const isOverlapping = busySlots.some(busy => 
+      const isOverlapping = busySlots.some((busy: { start: Date, end: Date }) =>
         (currentSlot < busy.end && slotEnd > busy.start)
       );
-
       if (currentSlot > now) {
         slots.push({
           timeStr: currentSlot.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-          isAvailable: !isOverlapping // If overlapping, it's NOT available
+          isAvailable: !isOverlapping
         });
       }
-      currentSlot = slotEnd;
+      currentSlot = new Date(slotEnd.getTime() + bufferInMs);
     }
     return slots;
   };
@@ -108,14 +106,14 @@ export default function PublicBooking() {
 
     const timeMatch = selectedTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
     if (!timeMatch) return;
-    
+
     let [_, hoursStr, minutesStr, modifier] = timeMatch;
     let hours = parseInt(hoursStr, 10);
     const minutes = parseInt(minutesStr, 10);
-    
+
     if (modifier.toUpperCase() === 'PM' && hours !== 12) hours += 12;
     if (modifier.toUpperCase() === 'AM' && hours === 12) hours = 0;
-    
+
     const startDateTime = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate(), hours, minutes, 0, 0);
     const endDateTime = new Date(startDateTime.getTime() + eventType.duration * 60000);
 
@@ -133,42 +131,96 @@ export default function PublicBooking() {
     }
   };
 
-  if (!eventType || !availability) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  if (!eventType || !availability) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#101010' }}>
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: '#6d28d9', borderTopColor: 'transparent' }} />
+          <p className="text-sm" style={{ color: '#6b7280' }}>Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
+  // SUCCESS SCREEN
   if (step === 'success' && confirmedBooking) {
     const bookingDate = new Date(confirmedBooking.startTime);
     return (
-      <div className="min-h-screen bg-[#f9fafb] flex items-center justify-center p-4">
-        <div className="bg-white p-8 rounded-2xl shadow-sm max-w-lg w-full border border-gray-200">
-          <div className="text-center mb-6">
-            <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" />
-            <h1 className="text-2xl font-bold text-black">Booking Confirmed!</h1>
-          </div>
-          <div className="bg-gray-50 p-5 rounded-xl border border-gray-100 space-y-4 mb-8">
-            <h3 className="font-semibold text-black border-b border-gray-200 pb-2">Meeting Details</h3>
-            <div className="grid grid-cols-3 gap-2 text-sm">
-              <span className="text-gray-500 flex items-center gap-2"><User size={14}/> Host</span>
-              <span className="col-span-2 font-medium text-black">@{username}</span>
-              <span className="text-gray-500 flex items-center gap-2"><CalendarIcon size={14}/> When</span>
-              <span className="col-span-2 font-medium text-black">
-                {bookingDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} at {bookingDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-              </span>
-              <span className="text-gray-500 flex items-center gap-2 mt-2"><User size={14}/> Booker</span>
-              <span className="col-span-2 font-medium text-black mt-2">{confirmedBooking.bookerName} <br/><span className="text-gray-400 font-normal">{confirmedBooking.bookerEmail}</span></span>
-              {confirmedBooking.notes && (
-                <>
-                  <span className="text-gray-500 flex items-center gap-2 mt-2"><AlignLeft size={14}/> Notes</span>
-                  <span className="col-span-2 font-medium text-black mt-2 italic">"{confirmedBooking.notes}"</span>
-                </>
-              )}
+      <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: '#101010' }}>
+        <div
+          className="w-full max-w-md rounded-2xl border overflow-hidden"
+          style={{ backgroundColor: '#1a1a1a', borderColor: '#2a2a2a' }}
+        >
+          {/* Green header */}
+          <div className="flex flex-col items-center py-8 px-6" style={{ borderBottom: '1px solid #2a2a2a' }}>
+            <div
+              className="w-12 h-12 rounded-full flex items-center justify-center mb-4"
+              style={{ backgroundColor: 'rgba(52,211,153,0.15)', border: '1px solid rgba(52,211,153,0.3)' }}
+            >
+              <CheckCircle2 className="w-6 h-6" style={{ color: '#34d399' }} />
             </div>
+            <h1 className="text-lg font-semibold text-center" style={{ color: '#f3f4f6' }}>This meeting is scheduled</h1>
+            <p className="text-xs mt-1 text-center" style={{ color: '#6b7280' }}>
+              We sent an email with a calendar invitation with the details to everyone.
+            </p>
           </div>
-          <div className="flex flex-col gap-3">
-            {/* Dashboard Redirect Button */}
-            <button onClick={() => navigate('/dashboard')} className="w-full bg-black text-white py-3 rounded-md font-medium hover:bg-gray-800 transition">
+
+          {/* Details */}
+          <div className="px-6 py-5 space-y-4" style={{ borderBottom: '1px solid #2a2a2a' }}>
+            <DetailRow label="What" icon={<CalendarIcon size={13} />}>
+              <span style={{ color: '#f3f4f6' }}>{eventType.title} between @{username} and {confirmedBooking.bookerName}</span>
+            </DetailRow>
+            <DetailRow label="When" icon={<Clock size={13} />}>
+              <span style={{ color: '#f3f4f6' }}>
+                {bookingDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                <br />
+                {bookingDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} –{' '}
+                {new Date(bookingDate.getTime() + eventType.duration * 60000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </DetailRow>
+            <DetailRow label="Who" icon={<User size={13} />}>
+              <div className="space-y-1.5">
+                <div>
+                  <span style={{ color: '#f3f4f6' }}>@{username}</span>
+                  <span
+                    className="ml-2 text-[10px] px-1.5 py-0.5 rounded font-medium"
+                    style={{ backgroundColor: '#1e1b4b', color: '#a78bfa', border: '1px solid #3730a3' }}
+                  >
+                    Host
+                  </span>
+                </div>
+                <div>
+                  <span style={{ color: '#f3f4f6' }}>{confirmedBooking.bookerName}</span>
+                  <br />
+                  <span className="text-xs" style={{ color: '#6b7280' }}>{confirmedBooking.bookerEmail}</span>
+                </div>
+              </div>
+            </DetailRow>
+            {confirmedBooking.notes && (
+              <DetailRow label="Notes" icon={<AlignLeft size={13} />}>
+                <span className="italic text-sm" style={{ color: '#9ca3af' }}>"{confirmedBooking.notes}"</span>
+              </DetailRow>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="px-6 py-4 flex flex-col gap-2">
+            <button
+              onClick={() => navigate('/dashboard')}
+              className="w-full py-2 rounded-md text-sm font-medium transition-all"
+              style={{ backgroundColor: '#6d28d9', color: '#fff' }}
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#5b21b6')}
+              onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#6d28d9')}
+            >
               Go to Dashboard
             </button>
-            <button onClick={() => window.location.reload()} className="w-full bg-white text-black border border-gray-300 py-3 rounded-md font-medium hover:bg-gray-50 transition">
+            <button
+              onClick={() => window.location.reload()}
+              className="w-full py-2 rounded-md text-sm font-medium border transition-all"
+              style={{ backgroundColor: 'transparent', borderColor: '#2a2a2a', color: '#9ca3af' }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = '#3f3f46'; e.currentTarget.style.color = '#f3f4f6'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = '#2a2a2a'; e.currentTarget.style.color = '#9ca3af'; }}
+            >
               Book another slot
             </button>
           </div>
@@ -177,80 +229,166 @@ export default function PublicBooking() {
     );
   }
 
+  const timeSlots = generateTimeSlots();
+
   return (
-    <div className="min-h-screen bg-[#f9fafb] flex items-center justify-center p-4">
-      <div className={`bg-white border border-gray-200 rounded-2xl shadow-sm w-full max-w-4xl flex flex-col md:flex-row overflow-hidden transition-opacity ${loading ? 'opacity-50 pointer-events-none' : ''}`}>
-        {/* Left Sidebar */}
-        <div className="p-8 border-b md:border-b-0 md:border-r border-gray-200 w-full md:w-1/3 bg-white">
+    <div
+      className="min-h-screen flex items-center justify-center p-4"
+      style={{ backgroundColor: '#101010' }}
+    >
+      <div
+        className={`w-full max-w-4xl rounded-2xl border flex flex-col md:flex-row overflow-hidden transition-opacity ${loading ? 'opacity-50 pointer-events-none' : ''}`}
+        style={{ backgroundColor: '#1a1a1a', borderColor: '#2a2a2a' }}
+      >
+        {/* Left sidebar */}
+        <div
+          className="w-full md:w-72 flex-shrink-0 p-6 border-b md:border-b-0 md:border-r"
+          style={{ backgroundColor: '#141414', borderColor: '#2a2a2a' }}
+        >
           {step === 'form' && (
-             <button onClick={() => setStep('calendar')} className="mb-6 flex items-center gap-2 text-sm text-gray-500 hover:text-black transition"><ArrowLeft size={16} /> Back</button>
+            <button
+              onClick={() => setStep('calendar')}
+              className="flex items-center gap-1.5 text-xs mb-5 transition"
+              style={{ color: '#6b7280' }}
+              onMouseEnter={e => (e.currentTarget.style.color = '#f3f4f6')}
+              onMouseLeave={e => (e.currentTarget.style.color = '#6b7280')}
+            >
+              <ArrowLeft size={14} /> Back
+            </button>
           )}
-          <p className="text-gray-500 font-medium mb-1">@{username}</p>
-          <h1 className="text-2xl font-bold text-black mb-2 uppercase tracking-tight">{eventType.title}</h1>
-          <div className="space-y-3 mt-4">
-            <div className="flex items-center gap-3 text-gray-600 font-medium"><Clock size={18} className="text-gray-400" /> {eventType.duration} Min Meeting</div>
+
+          {/* Avatar placeholder */}
+          <div
+            className="w-9 h-9 rounded-full flex items-center justify-center mb-3 text-sm font-bold"
+            style={{ backgroundColor: '#6d28d9', color: '#fff' }}
+          >
+            {username?.[0]?.toUpperCase() || 'U'}
+          </div>
+
+          <p className="text-xs mb-1" style={{ color: '#6b7280' }}>{username}</p>
+          <h1 className="text-xl font-bold mb-4" style={{ color: '#f3f4f6' }}>{eventType.title}</h1>
+
+          <div className="space-y-2.5">
+            <div className="flex items-center gap-2 text-sm" style={{ color: '#9ca3af' }}>
+              <Clock size={14} style={{ color: '#6b7280' }} />
+              {eventType.duration} min
+            </div>
+            <div className="flex items-center gap-2 text-sm" style={{ color: '#9ca3af' }}>
+              <Globe size={14} style={{ color: '#6b7280' }} />
+              {availability.timeZone}
+            </div>
             {selectedDate && selectedTime && (
-              <div className="flex items-center gap-3 text-gray-600 font-medium text-sm bg-gray-50 p-3 rounded-lg border border-gray-100 mt-4">
-                <CalendarIcon size={18} className="text-gray-400" />
-                {selectedTime}, {selectedDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+              <div
+                className="flex items-start gap-2 text-xs mt-3 px-3 py-2.5 rounded-lg"
+                style={{ backgroundColor: '#1e1e1e', border: '1px solid #2a2a2a', color: '#9ca3af' }}
+              >
+                <CalendarIcon size={13} className="flex-shrink-0 mt-0.5" style={{ color: '#6d28d9' }} />
+                <span>
+                  {selectedTime},{' '}
+                  {selectedDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                </span>
               </div>
             )}
           </div>
         </div>
-        
-        {/* Right Content */}
-        <div className="p-8 flex-1 bg-white">
+
+        {/* Right content */}
+        <div className="flex-1 p-6 min-w-0">
           {step === 'calendar' && (
-            <div className="flex flex-col md:flex-row gap-8">
+            <div className="flex flex-col md:flex-row gap-6 h-full">
+              {/* Calendar */}
               <div className="flex-1">
-                <h2 className="text-lg font-bold text-black mb-6 flex items-center justify-between">{today.toLocaleString('default', { month: 'long' })} {today.getFullYear()}</h2>
-                <div className="grid grid-cols-7 gap-y-4 gap-x-2 text-center">
-                  {['SUN','MON','TUE','WED','THU','FRI','SAT'].map(d => <div key={d} className="text-[11px] font-bold text-gray-400 mb-2">{d}</div>)}
+                <h2 className="text-sm font-semibold mb-5" style={{ color: '#f3f4f6' }}>
+                  {today.toLocaleString('default', { month: 'long' })} {today.getFullYear()}
+                  <span className="ml-2 text-xs font-normal" style={{ color: '#6b7280' }}>
+                    — Select a Date
+                  </span>
+                </h2>
+
+                <div className="grid grid-cols-7 gap-y-1 text-center">
+                  {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map(d => (
+                    <div key={d} className="text-[10px] font-semibold pb-3" style={{ color: '#4b5563' }}>{d}</div>
+                  ))}
                   {[...Array(firstDayOfMonth)].map((_, i) => <div key={`empty-${i}`} />)}
                   {[...Array(daysInMonth)].map((_, i) => {
                     const date = new Date(today.getFullYear(), today.getMonth(), i + 1);
-                    const isPast = date < new Date(new Date().setHours(0,0,0,0));
+                    const isPast = date < new Date(new Date().setHours(0, 0, 0, 0));
                     const isSelected = selectedDate?.getDate() === i + 1;
                     const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
                     const isAvailableDay = availability?.days.find((d: any) => d.day === dayName)?.active;
+                    const isToday = date.toDateString() === today.toDateString();
                     const disabled = isPast || !isAvailableDay;
 
                     return (
-                      <button key={i} disabled={disabled} onClick={() => setSelectedDate(date)}
-                        className={`aspect-square flex items-center justify-center rounded-full text-sm font-medium transition-all ${disabled ? 'text-gray-200 cursor-not-allowed' : 'hover:bg-gray-100 text-gray-700'} ${isSelected ? 'bg-black text-white hover:bg-black' : ''}`}>
+                      <button
+                        key={i}
+                        disabled={disabled}
+                        onClick={() => { setSelectedDate(date); setSelectedTime(null); }}
+                        className="aspect-square flex items-center justify-center rounded-full text-xs font-medium transition-all mx-auto w-8 h-8"
+                        style={{
+                          backgroundColor: isSelected ? '#6d28d9' : 'transparent',
+                          color: isSelected ? '#fff' : disabled ? '#2a2a2a' : isToday ? '#a78bfa' : '#d1d5db',
+                          cursor: disabled ? 'not-allowed' : 'pointer',
+                          outline: isToday && !isSelected ? '1px solid #3730a3' : 'none',
+                        }}
+                        onMouseEnter={e => { if (!disabled && !isSelected) e.currentTarget.style.backgroundColor = '#2a2a2a'; }}
+                        onMouseLeave={e => { if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                      >
                         {i + 1}
                       </button>
-                    )
+                    );
                   })}
                 </div>
               </div>
 
+              {/* Time slots */}
               {selectedDate && (
-                <div className="w-full md:w-48 h-[400px] overflow-y-auto pr-2 custom-scrollbar border-t md:border-t-0 md:border-l border-gray-100 md:pl-6 pt-6 md:pt-0">
-                  <h3 className="text-sm font-bold text-black mb-4">Available Times</h3>
-                  <div className="space-y-2">
-                    {generateTimeSlots().length > 0 ? (
-                      generateTimeSlots().map((slot: any) => (
-                        <div key={slot.timeStr} className="flex gap-2">
-                          <button 
+                <div
+                  className="w-full md:w-44 border-t md:border-t-0 md:border-l pt-5 md:pt-0 md:pl-5 flex flex-col"
+                  style={{ borderColor: '#2a2a2a' }}
+                >
+                  <h3 className="text-xs font-semibold mb-3" style={{ color: '#9ca3af' }}>
+                    {selectedDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                  </h3>
+                  <div className="flex-1 overflow-y-auto space-y-2 pr-1" style={{ maxHeight: '380px' }}>
+                    {timeSlots.length > 0 ? (
+                      timeSlots.map((slot: any) => (
+                        <div key={slot.timeStr} className="flex gap-1.5">
+                          <button
                             disabled={!slot.isAvailable}
                             onClick={() => setSelectedTime(slot.timeStr)}
-                            // UPDATED STYLING: Strike-through if booked!
-                            className={`flex-1 py-3 px-4 rounded-md border text-sm font-medium transition-all 
-                              ${!slot.isAvailable ? 'bg-gray-50 border-gray-100 text-gray-400 line-through cursor-not-allowed' : 
-                              selectedTime === slot.timeStr ? 'bg-black text-white border-black' : 'border-gray-200 text-black hover:border-black'}`}
+                            className="flex-1 py-2.5 rounded-md border text-xs font-medium transition-all"
+                            style={{
+                              backgroundColor: selectedTime === slot.timeStr ? '#6d28d9' : 'transparent',
+                              borderColor: selectedTime === slot.timeStr ? '#6d28d9' : '#2a2a2a',
+                              color: !slot.isAvailable
+                                ? '#2a2a2a'
+                                : selectedTime === slot.timeStr
+                                ? '#fff'
+                                : '#d1d5db',
+                              textDecoration: !slot.isAvailable ? 'line-through' : 'none',
+                              cursor: !slot.isAvailable ? 'not-allowed' : 'pointer',
+                            }}
+                            onMouseEnter={e => { if (slot.isAvailable && selectedTime !== slot.timeStr) { e.currentTarget.style.borderColor = '#6d28d9'; e.currentTarget.style.color = '#f3f4f6'; } }}
+                            onMouseLeave={e => { if (slot.isAvailable && selectedTime !== slot.timeStr) { e.currentTarget.style.borderColor = '#2a2a2a'; e.currentTarget.style.color = '#d1d5db'; } }}
                           >
                             {slot.timeStr}
                           </button>
                           {selectedTime === slot.timeStr && slot.isAvailable && (
-                            <button onClick={() => setStep('form')} className="bg-black text-white px-4 rounded-md text-sm font-medium hover:bg-gray-800">
-                              Next
+                            <button
+                              onClick={() => setStep('form')}
+                              className="px-2.5 rounded-md text-xs font-medium transition-all"
+                              style={{ backgroundColor: '#6d28d9', color: '#fff' }}
+                              onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#5b21b6')}
+                              onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#6d28d9')}
+                            >
+                              →
                             </button>
                           )}
                         </div>
                       ))
                     ) : (
-                      <p className="text-sm text-gray-500">No times available.</p>
+                      <p className="text-xs" style={{ color: '#4b5563' }}>No times available.</p>
                     )}
                   </div>
                 </div>
@@ -259,18 +397,112 @@ export default function PublicBooking() {
           )}
 
           {step === 'form' && (
-            <div className="max-w-md animate-in fade-in slide-in-from-right-4 duration-300">
-              <h2 className="text-xl font-bold text-black mb-6">Enter Details</h2>
-              <form onSubmit={handleBook} className="space-y-4">
-                <input type="text" required placeholder="Name *" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full border border-gray-300 rounded-md p-3 text-black focus:ring-black focus:border-black" />
-                <input type="email" required placeholder="Email *" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full border border-gray-300 rounded-md p-3 text-black focus:ring-black focus:border-black" />
-                <textarea rows={3} placeholder="Additional Notes" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} className="w-full border border-gray-300 rounded-md p-3 text-black focus:ring-black focus:border-black" />
-                <button type="submit" className="w-full bg-black text-white py-3 rounded-md font-medium hover:bg-gray-800 mt-4">Confirm Booking</button>
+            <div className="max-w-md">
+              <h2 className="text-sm font-semibold mb-5" style={{ color: '#f3f4f6' }}>Enter Details</h2>
+              <form onSubmit={handleBook} className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium mb-1" style={{ color: '#9ca3af' }}>Your name *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="John Doe"
+                    value={formData.name}
+                    onChange={e => setFormData({ ...formData, name: e.target.value })}
+                    className="w-full rounded-md px-3 py-2.5 text-sm border outline-none transition"
+                    style={{ backgroundColor: '#111111', borderColor: '#2a2a2a', color: '#f3f4f6' }}
+                    onFocus={e => (e.currentTarget.style.borderColor = '#6d28d9')}
+                    onBlur={e => (e.currentTarget.style.borderColor = '#2a2a2a')}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1" style={{ color: '#9ca3af' }}>Email address *</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="john@example.com"
+                    value={formData.email}
+                    onChange={e => setFormData({ ...formData, email: e.target.value })}
+                    className="w-full rounded-md px-3 py-2.5 text-sm border outline-none transition"
+                    style={{ backgroundColor: '#111111', borderColor: '#2a2a2a', color: '#f3f4f6' }}
+                    onFocus={e => (e.currentTarget.style.borderColor = '#6d28d9')}
+                    onBlur={e => (e.currentTarget.style.borderColor = '#2a2a2a')}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1" style={{ color: '#9ca3af' }}>Additional notes</label>
+                  <textarea
+                    rows={3}
+                    placeholder="Please share anything that will help prepare for our meeting."
+                    value={formData.notes}
+                    onChange={e => setFormData({ ...formData, notes: e.target.value })}
+                    className="w-full rounded-md px-3 py-2.5 text-sm border outline-none transition resize-none"
+                    style={{ backgroundColor: '#111111', borderColor: '#2a2a2a', color: '#f3f4f6' }}
+                    onFocus={e => (e.currentTarget.style.borderColor = '#6d28d9')}
+                    onBlur={e => (e.currentTarget.style.borderColor = '#2a2a2a')}
+                  />
+                </div>
+
+                {/* Add guests hint */}
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 text-xs transition"
+                  style={{ color: '#6b7280' }}
+                  onMouseEnter={e => (e.currentTarget.style.color = '#9ca3af')}
+                  onMouseLeave={e => (e.currentTarget.style.color = '#6b7280')}
+                >
+                  <User size={12} /> + Add guests
+                </button>
+
+                <p className="text-xs pt-1" style={{ color: '#4b5563' }}>
+                  By proceeding, you agree to our{' '}
+                  <span style={{ color: '#6b7280', textDecoration: 'underline', cursor: 'pointer' }}>Terms</span>{' '}
+                  and{' '}
+                  <span style={{ color: '#6b7280', textDecoration: 'underline', cursor: 'pointer' }}>Privacy Policy</span>.
+                </p>
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setStep('calendar')}
+                    className="px-4 py-2 rounded-md text-sm font-medium border transition-all"
+                    style={{ backgroundColor: 'transparent', borderColor: '#2a2a2a', color: '#9ca3af' }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = '#3f3f46'; e.currentTarget.style.color = '#f3f4f6'; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#2a2a2a'; e.currentTarget.style.color = '#9ca3af'; }}
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2 rounded-md text-sm font-medium transition-all"
+                    style={{ backgroundColor: '#6d28d9', color: '#fff' }}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#5b21b6')}
+                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#6d28d9')}
+                  >
+                    {loading ? 'Confirming...' : 'Confirm'}
+                  </button>
+                </div>
               </form>
             </div>
           )}
         </div>
       </div>
+
+      {/* Cal.com watermark */}
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2">
+        <p className="text-xs" style={{ color: '#2a2a2a' }}>Cal.clone</p>
+      </div>
+    </div>
+  );
+}
+
+function DetailRow({ label, icon, children }: { label: string; icon: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="flex gap-4 text-sm">
+      <div className="w-16 flex-shrink-0 flex items-start gap-1.5 pt-0.5" style={{ color: '#6b7280' }}>
+        {icon}
+        <span className="text-xs">{label}</span>
+      </div>
+      <div className="flex-1 text-sm" style={{ color: '#9ca3af' }}>{children}</div>
     </div>
   );
 }

@@ -8,16 +8,18 @@ datasource db {
 }
 
 model EventType {
-  id          String   @id @default(uuid())
-  title       String
-  description String?
-  duration    Int      
-  urlSlug     String   @unique
-  isActive    Boolean  @default(true)
-  userId      String   
+  id             String   @id @default(uuid())
+  title          String
+  description    String?
+  duration       Int      
+  urlSlug        String   @unique
+  isActive       Boolean  @default(true)
+  
+  userId         String   
+  availabilityId String?  // <-- NEW FIELD (Optional so it doesn't break old data)
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 // UPGRADED MODEL

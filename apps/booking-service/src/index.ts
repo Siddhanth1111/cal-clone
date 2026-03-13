@@ -98,13 +98,20 @@ app.get('/api/bookings/busy', async (req, res) => {
 });
 
 // CANCEL a booking
+
 app.put('/api/bookings/:id/cancel', async (req, res) => {
   try {
     const { id } = req.params;
+    
+    // 1. Update the database
     const updated = await prisma.booking.update({
       where: { id },
       data: { status: 'CANCELLED' }
     });
+    
+    // 2. Fire and forget the notification via RabbitMQ!
+    sendToQueue(updated);
+    
     res.json(updated);
   } catch (error) {
     res.status(500).json({ error: 'Failed to cancel booking' });
