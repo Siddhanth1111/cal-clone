@@ -1,0 +1,21 @@
+{
+  "name": "scaler-assignment",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces",
+    "build": "npm run build --workspaces",
+    "install:all": "npm install"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3"
+  },
+
+  "author": "Siddhanth Chauhan",
+  "license": "ISC",
+  "description": "I am using microservices architecture here"
+}

@@ -1,0 +1,146 @@
+version: '3.8'
+
+services:
+  # -----------------------------------------------------------------
+  # INFRASTRUCTURE (Databases & Messaging)
+  # -----------------------------------------------------------------
+
+  # 1. The Main Database (PostgreSQL)
+  postgres:
+    image: postgres:16-alpine
+    container_name: scheduling-postgres
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: scheduling_platform
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - scheduling-network
+
+  # 2. Message Queue (RabbitMQ) - For booking confirmation emails
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: scheduling-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: "admin"
+      RABBITMQ_DEFAULT_PASS: "password123"
+    networks:
+      - scheduling-network
+
+  # 3. Redis (For Caching & Session logic if needed)
+  redis:
+    image: redis:alpine
+    container_name: scheduling-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - scheduling-network
+
+  # -----------------------------------------------------------------
+  # APPLICATION SERVICES (Your Code)
+  # -----------------------------------------------------------------
+
+  # 4. API Gateway (The Entry Point)
+  api-gateway:
+    build: 
+      context: ./apps/api-gateway
+      dockerfile: Dockerfile
+    container_name: scheduling-gateway
+    ports:
+      - "8080:8080"
+    depends_on:
+      - auth-service
+      - event-service
+      - booking-service
+    networks:
+      - scheduling-network
+
+  # 5. Auth Service (Handles our default admin user)
+  auth-service:
+    build: 
+      context: ./apps/auth-service
+      dockerfile: Dockerfile
+    container_name: scheduling-auth
+    depends_on:
+      - postgres
+    environment:
+      DATABASE_URL: "postgresql://admin:password123@postgres:5432/scheduling_platform?schema=auth"
+      JWT_SECRET: "super_secret_scheduling_key"
+      PORT: 3001
+    networks:
+      - scheduling-network
+
+  # 6. Event Service (Manages Event Types & Availability)
+  event-service:
+    build: 
+      context: ./apps/event-service
+      dockerfile: Dockerfile
+    container_name: scheduling-event
+    ports:
+      - "3002:3002"
+    depends_on:
+      - postgres
+    environment:
+      DATABASE_URL: "postgresql://admin:password123@postgres:5432/scheduling_platform?schema=event"
+      PORT: 3002
+    networks:
+      - scheduling-network
+
+  # 7. Booking Service (Core booking logic & double-booking prevention)
+  booking-service:
+    build: 
+      context: ./apps/booking-service
+      dockerfile: Dockerfile
+    container_name: scheduling-booking
+    ports:
+      - "3003:3003"
+    depends_on:
+      - postgres
+    environment:
+      DATABASE_URL: "postgresql://admin:password123@postgres:5432/scheduling_platform?schema=booking"
+      PORT: 3003
+    networks:
+      - scheduling-network
+
+  # 8. Notification Service (Listens to RabbitMQ to send emails)
+  # notification-service:
+  #   build: 
+  #     context: ./apps/notification-service
+  #     dockerfile: Dockerfile
+  #   container_name: scheduling-notification
+  #   depends_on:
+  #     - rabbitmq
+  #   networks:
+  #     - scheduling-network
+
+  # # 9. Frontend (Client - React/Vite)
+  client:
+    build: 
+      context: ./apps/client
+      dockerfile: Dockerfile
+    container_name: scheduling-client
+    ports:
+      - "5173:5173" 
+    volumes:
+      - ./apps/client:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8080
+    networks:
+      - scheduling-network
+
+# -----------------------------------------------------------------
+# NETWORKS & VOLUMES
+# -----------------------------------------------------------------
+networks:
+  scheduling-network:
+    driver: bridge
+
+volumes:
+  postgres_data:

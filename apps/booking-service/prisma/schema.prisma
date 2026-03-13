@@ -1,0 +1,23 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Booking {
+  id            String   @id @default(uuid())
+  bookerName    String
+  bookerEmail   String
+  startTime     DateTime
+  endTime       DateTime
+  status        String   @default("CONFIRMED") // CONFIRMED, CANCELLED
+  
+  eventTypeId   String   // Loose relation to Event Service
+  userId        String   // Loose relation to Auth Service (the admin who owns the event)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
