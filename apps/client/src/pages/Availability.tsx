@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Calendar, Clock, Link as LinkIcon, Settings, Plus, Save, Trash2, X } from 'lucide-react';
 import axios from 'axios';
 
-const API_URL = 'http://localhost:8080/api';
+const API_URL = 'http://13.51.167.187:8080/api';
 
 export default function Availability() {
   const navigate = useNavigate();
