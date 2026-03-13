@@ -1,3 +1,5 @@
+Live Link - http://16.171.35.55:5173/dashboard
+
 The application is built using a Microservices Architecture, containerized with Docker, and utilizes RabbitMQ for asynchronous event-driven notifications.
 
 🏗 System Architecture
